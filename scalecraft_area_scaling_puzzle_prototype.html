@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScaleCraft — Spatial Area Scaling Puzzle</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-paper: #f6f5f0;
+      --grid-line: #dcd9ce;
+      --grid-major: #c2beb0;
+      --blueprint-bg: #eef3fb;
+      --blueprint-line: #cbd8ee;
+      --cobalt: #2563eb;
+      --cobalt-dark: #1d4ed8;
+      --amber: #f59e0b;
+      --ink: #1e293b;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-paper);
+      color: var(--ink);
+      background-image:
+        radial-gradient(#d6d3c9 1px, transparent 1px);
+      background-size: 20px 20px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Tactile Tile Pop Animation */
+    @keyframes tilePop {
+      0% { transform: scale(0.72); }
+      65% { transform: scale(1.06); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes celebrateWave {
+      0% { transform: scale(1); background-color: #2563eb; }
+      50% { transform: scale(1.1); background-color: #10b981; }
+      100% { transform: scale(1); background-color: #059669; }
+    }
+
+    .tile-filled {
+      animation: tilePop 0.16s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    .tile-celebrate {
+      animation: celebrateWave 0.45s ease-out forwards;
+    }
+
+    /* Blocked Obstacle Hatching */
+    .tile-blocked {
+      background-color: #334155;
+      background-image: repeating-linear-gradient(
+        -45deg,
+        #334155,
+        #334155 5px,
+        #475569 5px,
+        #475569 10px
+      );
+      cursor: not-allowed;
+    }
+
+    /* Blueprint Grid Pattern */
+    .blueprint-panel {
+      background-color: var(--blueprint-bg);
+      background-image:
+        linear-gradient(to right, rgba(59, 130, 246, 0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(59, 130, 246, 0.08) 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+
+    /* Neo-brutalist crisp shadow */
+    .card-draft {
+      box-shadow: 0 4px 0 #cbd5e1, 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+    }
+
+    .btn-tactile {
+      transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
+      box-shadow: 0 3px 0 rgba(15, 23, 42, 0.18);
+    }
+    .btn-tactile:active:not(:disabled) {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.18);
+    }
+
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+  <!-- Top Navigation & Level Selector -->
+  <header class="bg-white/95 backdrop-blur border-b-2 border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm border-2 border-slate-900">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <path d="M14 14h7v7h-7z" fill="currentColor" fill-opacity="0.35"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-extrabold tracking-tight text-slate-900 leading-none">ScaleCraft</h1>
+          <p class="text-[11px] font-medium text-slate-500 mt-0.5">Area Scaling Geometry Lab</p>
+        </div>
+      </div>
+
+      <!-- Level Pills -->
+      <nav id="level-nav" class="flex items-center gap-1.5 overflow-x-auto py-1" aria-label="Levels">
+        <!-- Populated dynamically -->
+      </nav>
+
+      <!-- Shuffle & Sound Controls -->
+      <div class="flex items-center gap-2">
+        <button id="reshuffle-btn" class="btn-tactile px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5 cursor-pointer" title="Generate 15 new randomized exercises">
+          <span>🎲</span>
+          <span class="hidden sm:inline">New 15</span>
+        </button>
+        <button id="mute-btn" class="btn-tactile px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer" title="Toggle Sound Effects">
+          <span id="mute-icon">🔊</span>
+          <span id="mute-label" class="hidden sm:inline">Sound On</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="max-w-6xl w-full mx-auto px-4 py-5 flex-1 flex flex-col gap-5">
+
+    <!-- Level Title & Educational Prompt Banner -->
+    <section class="bg-white rounded-2xl border-2 border-slate-200 p-4 card-draft flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span id="level-badge" class="font-mono-tech text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+            Level 1 of 6
+          </span>
+          <h2 id="level-title" class="text-lg sm:text-xl font-bold text-slate-900">The Quadratic Jump</h2>
+        </div>
+        <p id="level-desc" class="text-sm text-slate-600 mt-1">
+          Double every side length of the 2×2 blueprint square. Notice what happens to the total area!
+        </p>
+      </div>
+
+      <!-- Scale Multiplier Hero Pill -->
+      <div class="flex items-center gap-3 self-start md:self-center shrink-0">
+        <div class="bg-slate-900 text-white px-4 py-2.5 rounded-xl border-2 border-slate-800 shadow-sm flex items-center gap-3">
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Target Scale</div>
+            <div id="scale-factor-display" class="font-mono-tech text-2xl font-extrabold text-amber-400 leading-tight">2×</div>
+          </div>
+          <div class="h-8 w-px bg-slate-700"></div>
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Scaling Law</div>
+            <div class="font-mono-tech text-xs sm:text-sm font-semibold text-blue-300">
+              Area × k²
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Split Screen Grids -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+
+      <!-- Left Panel: Reference Blueprint (5 cols on lg) -->
+      <div class="lg:col-span-5 blueprint-panel rounded-2xl border-2 border-blue-200 p-4 sm:p-5 card-draft flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+              <h3 class="text-sm font-extrabold uppercase tracking-wider text-blue-950">Reference Blueprint</h3>
+            </div>
+            <span id="ref-dims-badge" class="font-mono-tech text-xs font-bold px-2.5 py-1 rounded-md bg-white/90 text-blue-900 border border-blue-200 shadow-xs">
+              2w × 2h
+            </span>
+          </div>
+
+          <!-- Reference Grid Container -->
+          <div class="bg-white/80 rounded-xl border border-blue-200 p-4 flex items-center justify-center min-h-[260px] sm:min-h-[310px]">
+            <div id="ref-grid" class="grid gap-[2px] bg-blue-200 p-[2px] rounded-lg shadow-inner">
+              <!-- Reference cells rendered by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Reference Readout Footer -->
+        <div class="mt-4 pt-3 border-t border-blue-200/80 flex items-center justify-between text-xs sm:text-sm">
+          <span class="text-blue-900/80 font-medium">Original Blueprint Area:</span>
+          <span id="ref-area-readout" class="font-mono-tech font-bold text-blue-950 bg-white px-2.5 py-1 rounded-md border border-blue-200">
+            4 sq units
+          </span>
+        </div>
+      </div>
+
+      <!-- Right Panel: Interactive Build Grid (7 cols on lg) -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border-2 border-slate-200 p-4 sm:p-5 card-draft flex flex-col justify-between">
+        <div>
+          <!-- Top Toolbar -->
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-800">Build Grid</h3>
+              <span class="text-xs text-slate-400 hidden sm:inline">(Click &amp; drag to paint)</span>
+            </div>
+
+            <!-- Drawing Mode & Utility Controls -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <button id="tool-paint" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 bg-blue-600 text-white border-blue-700 shadow-xs">
+                <span>🖌️</span> Paint
+              </button>
+              <button id="tool-erase" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200">
+                <span>🧹</span> Erase
+              </button>
+              <button id="clear-btn" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border transition bg-slate-100 text-slate-600 border-slate-300 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <!-- Legend for special tiles (shown when level has anchors/obstacles) -->
+          <div id="special-legend" class="hidden mb-2.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 flex flex-wrap items-center gap-4 text-xs text-slate-600">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-xs bg-amber-400 border border-amber-600 inline-flex items-center justify-center text-[9px]">📌</span>
+              <span><strong>Anchor Pin:</strong> Must be part of your scaled shape</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-xs tile-blocked inline-block border border-slate-600"></span>
+              <span><strong>Blocked Zone:</strong> Cannot build here</span>
+            </div>
+          </div>
+
+          <!-- Interactive Build Grid Container -->
+          <div class="bg-slate-100/90 rounded-xl border border-slate-200 p-3 sm:p-4 flex items-center justify-center min-h-[260px] sm:min-h-[310px] relative overflow-hidden">
+            <div id="build-grid" class="grid gap-[2px] bg-slate-300 p-[2px] rounded-lg shadow-inner touch-none">
+              <!-- Interactive cells rendered by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Area Meter & Action Bar -->
+        <div class="mt-4 pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <!-- Area Counter Pill -->
+          <div id="area-meter-box" class="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200">
+            <div>
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Painted Area</div>
+              <div class="font-mono-tech text-base sm:text-lg font-extrabold text-slate-900">
+                <span id="painted-count" class="text-blue-600">0</span>
+                <span class="text-xs font-medium text-slate-500 ml-1">sq units</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Verify & Next Buttons -->
+          <div class="flex items-center gap-2 self-end sm:self-center">
+            <button id="check-btn" class="btn-tactile px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm border-2 border-slate-900 flex items-center gap-2 cursor-pointer">
+              <span>Check Scale</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+
+            <button id="next-btn" class="hidden btn-tactile px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm border-2 border-slate-900 flex items-center gap-1.5 cursor-pointer">
+              <span>Next Level</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dynamic Feedback & Math Insight Banner -->
+    <section id="feedback-banner" class="hidden rounded-2xl border-2 p-4 transition-all">
+      <div class="flex items-start gap-3">
+        <div id="feedback-icon" class="text-2xl leading-none mt-0.5">💡</div>
+        <div class="flex-1">
+          <h4 id="feedback-title" class="font-bold text-sm sm:text-base">Feedback Title</h4>
+          <p id="feedback-text" class="text-xs sm:text-sm mt-0.5 leading-relaxed">Feedback explanation goes here.</p>
+          <div id="ghost-legend" class="hidden mt-2.5 pt-2 border-t border-rose-200/70 flex flex-wrap items-center gap-4 text-xs font-medium text-rose-900">
+            <span class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-xs border-2 border-dashed border-emerald-600 bg-emerald-100 inline-block"></span>
+              Dashed Green = Missing scaled tiles
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-xs bg-rose-500/80 border border-rose-700 inline-block"></span>
+              Red Tint = Extra tiles outside scaled shape
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Subtle Footer -->
+  <footer class="max-w-6xl w-full mx-auto px-4 py-3 text-center text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80">
+    <span>Tip: Right-click any tile on the Build Grid to erase quickly.</span>
+    <span class="font-mono-tech">Scale factor k → Area × k²</span>
+  </footer>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. PROCEDURAL 15-EXERCISE RANDOMIZED GENERATOR
+     * ============================================================================
+     * Generates 15 unique, randomized exercises per run across 5 progressive tiers:
+     *   - Exercises 1–3:   Rectangles & Squares (2× and 3× scale-up)
+     *   - Exercises 4–6:   Polyominoes — L, T, Z, Plus, U (2× and 3× scale-up)
+     *   - Exercises 7–9:   Scale-Downs (0.5× and 0.33× macro-block compression)
+     *   - Exercises 10–12: Pixel Art & Architectural Sprites (2× scale-up)
+     *   - Exercises 13–15: Anchored & Obstructed Spatial Puzzles (2× scale-up)
+     */
+    let LEVELS = [];
+
+    function rotateMatrix90(mat) {
+      const R = mat.length;
+      const C = mat[0].length;
+      const res = Array.from({ length: C }, () => Array(R).fill(0));
+      for (let r = 0; r < R; r++) {
+        for (let c = 0; c < C; c++) {
+          res[c][R - 1 - r] = mat[r][c];
+        }
+      }
+      return res;
+    }
+
+    function flipMatrixH(mat) {
+      return mat.map(row => [...row].reverse());
+    }
+
+    function randomizeOrientation(mat) {
+      let out = mat.map(r => [...r]);
+      const turns = Math.floor(Math.random() * 4);
+      for (let i = 0; i < turns; i++) out = rotateMatrix90(out);
+      if (Math.random() < 0.5) out = flipMatrixH(out);
+      return out;
+    }
+
+    function expandMacroBlueprint(baseMat, factor) {
+      const R = baseMat.length;
+      const C = baseMat[0].length;
+      const out = Array.from({ length: R * factor }, () => Array(C * factor).fill(0));
+      for (let r = 0; r < R; r++) {
+        for (let c = 0; c < C; c++) {
+          if (baseMat[r][c] === 1) {
+            for (let dr = 0; dr < factor; dr++) {
+              for (let dc = 0; dc < factor; dc++) {
+                out[r * factor + dr][c * factor + dc] = 1;
+              }
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    function generateRandomizedExercises() {
+      const exercises = [];
+      const usedSignatures = new Set();
+
+      const pickUnique = (candidates) => {
+        const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+        for (const item of shuffled) {
+          const sig = `${item.scale}|${JSON.stringify(item.blueprint)}`;
+          if (!usedSignatures.has(sig)) {
+            usedSignatures.add(sig);
+            return item;
+          }
+        }
+        return shuffled[0];
+      };
+
+      // --- TIER 1: Exercises 1-3 (Rectangles & Squares, 2x & 3x) ---
+      const rectPool = [
+        { name: "Square Foundation", bp: [[1, 1], [1, 1]], scale: 2 },
+        { name: "Wide Courtyard", bp: [[1, 1, 1], [1, 1, 1]], scale: 2 },
+        { name: "Tall Pavilion", bp: [[1, 1], [1, 1], [1, 1]], scale: 2 },
+        { name: "Unit Block Expansion", bp: [[1]], scale: 3 },
+        { name: "Corridor Stretch", bp: [[1, 1], [1, 1]], scale: 3 },
+        { name: "Gallery Wing", bp: [[1, 1, 1]], scale: 3 },
+        { name: "Long Terrace", bp: [[1, 1, 1, 1], [1, 1, 1, 1]], scale: 2 }
+      ];
+
+      for (let i = 0; i < 3; i++) {
+        const chosen = pickUnique(rectPool.map(r => ({
+          ...r,
+          blueprint: i === 0 ? r.bp : randomizeOrientation(r.bp)
+        })));
+        const origArea = countMatrixArea(chosen.blueprint);
+        const k2 = chosen.scale * chosen.scale;
+        exercises.push({
+          id: exercises.length + 1,
+          title: chosen.name,
+          description: `Scale this ${chosen.blueprint[0].length}×${chosen.blueprint.length} rectangular blueprint by ${chosen.scale}×. Remember that both width and height multiply by ${chosen.scale}!`,
+          scale: chosen.scale,
+          buildRows: Math.max(8, chosen.blueprint.length * chosen.scale + 3),
+          buildCols: Math.max(8, chosen.blueprint[0].length * chosen.scale + 3),
+          blueprint: chosen.blueprint,
+          anchors: [],
+          blocked: [],
+          takeaway: `${chosen.scale}× width × ${chosen.scale}× height = ${k2}× area! Your ${origArea}-tile blueprint expanded to ${origArea * k2} tiles.`
+        });
+      }
+
+      // --- TIER 2: Exercises 4-6 (Polyominoes, 2x & 3x) ---
+      const polyBase = [
+        { name: "L-Tromino Blueprint", bp: [[1, 0], [1, 0], [1, 1]], scale: 2 },
+        { name: "T-Junction Plan", bp: [[1, 1, 1], [0, 1, 0]], scale: 2 },
+        { name: "Z-Step Module", bp: [[1, 1, 0], [0, 1, 1]], scale: 2 },
+        { name: "Plus Courtyard", bp: [[0, 1, 0], [1, 1, 1], [0, 1, 0]], scale: 2 },
+        { name: "U-Alcove Frame", bp: [[1, 0, 1], [1, 1, 1]], scale: 2 },
+        { name: "Triple L-Corner", bp: [[1, 0], [1, 1]], scale: 3 },
+        { name: "Triple T-Beam", bp: [[1, 1, 1], [0, 1, 0]], scale: 3 }
+      ];
+
+      for (let i = 0; i < 3; i++) {
+        const chosen = pickUnique(polyBase.map(p => ({
+          ...p,
+          blueprint: randomizeOrientation(p.bp)
+        })));
+        const origArea = countMatrixArea(chosen.blueprint);
+        const k2 = chosen.scale * chosen.scale;
+        exercises.push({
+          id: exercises.length + 1,
+          title: chosen.name,
+          description: `Scale every square of this ${origArea}-tile polyomino by ${chosen.scale}×. Each original cell becomes a ${chosen.scale}×${chosen.scale} block.`,
+          scale: chosen.scale,
+          buildRows: Math.max(8, chosen.blueprint.length * chosen.scale + 2),
+          buildCols: Math.max(9, chosen.blueprint[0].length * chosen.scale + 2),
+          blueprint: chosen.blueprint,
+          anchors: [],
+          blocked: [],
+          takeaway: `Scaling by ${chosen.scale}× multiplies area by ${chosen.scale}² = ${k2}. ${origArea} tiles × ${k2} = ${origArea * k2} tiles!`
+        });
+      }
+
+      // --- TIER 3: Exercises 7-9 (Scaling Down: 0.5x and 0.33x) ---
+      const shrinkPool = [
+        { name: "Half-Scale Notch", base: [[1, 1, 1], [1, 0, 1]], divisor: 2, label: 0.5 },
+        { name: "Half-Scale Corner", base: [[1, 0], [1, 0], [1, 1]], divisor: 2, label: 0.5 },
+        { name: "Half-Scale Cross", base: [[0, 1, 0], [1, 1, 1], [0, 1, 0]], divisor: 2, label: 0.5 },
+        { name: "Half-Scale Bridge", base: [[1, 1, 1, 1], [1, 0, 0, 1]], divisor: 2, label: 0.5 },
+        { name: "Third-Scale L-Block", base: [[1, 0], [1, 1]], divisor: 3, label: 0.33 },
+        { name: "Third-Scale Bar", base: [[1, 1, 1], [0, 1, 0]], divisor: 3, label: 0.33 }
+      ];
+
+      for (let i = 0; i < 3; i++) {
+        const chosen = pickUnique(shrinkPool.map(s => {
+          const orientedBase = randomizeOrientation(s.base);
+          return {
+            ...s,
+            blueprint: expandMacroBlueprint(orientedBase, s.divisor),
+            scale: Number((1 / s.divisor).toFixed(4)),
+            displayScale: s.label
+          };
+        }));
+        const origArea = countMatrixArea(chosen.blueprint);
+        const targetArea = Math.round(origArea / (chosen.divisor * chosen.divisor));
+        exercises.push({
+          id: exercises.length + 1,
+          title: chosen.name,
+          description: `Shrink this blueprint by ${chosen.displayScale}× (1/${chosen.divisor} size). Every ${chosen.divisor}×${chosen.divisor} group of squares condenses into 1 single square.`,
+          scale: chosen.scale,
+          scaleLabel: `${chosen.displayScale}×`,
+          buildRows: 7,
+          buildCols: 8,
+          blueprint: chosen.blueprint,
+          anchors: [],
+          blocked: [],
+          takeaway: `Scaling by 1/${chosen.divisor} multiplies area by (1/${chosen.divisor})² = 1/${chosen.divisor * chosen.divisor}. ${origArea} tiles condensed to ${targetArea} tiles!`
+        });
+      }
+
+      // --- TIER 4: Exercises 10-12 (Pixel Art Sprites, 2x) ---
+      const spritePool = [
+        { name: "Pixel Heart Mosaic", bp: [[1, 0, 1], [1, 1, 1], [0, 1, 0]] },
+        { name: "Space Invader Crest", bp: [[0, 1, 0, 1, 0], [1, 1, 1, 1, 1], [1, 0, 1, 0, 1]] },
+        { name: "Arrowhead Emblem", bp: [[0, 0, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]] },
+        { name: "Castle Battlement", bp: [[1, 0, 1, 0, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0]] },
+        { name: "Diagonal Diamond", bp: [[0, 1, 0], [1, 0, 1], [0, 1, 0]] },
+        { name: "Crown Silhouette", bp: [[1, 0, 1, 0, 1], [1, 1, 1, 1, 1]] }
+      ];
+
+      for (let i = 0; i < 3; i++) {
+        const chosen = pickUnique(spritePool.map(sp => ({
+          ...sp,
+          scale: 2,
+          blueprint: i === 0 ? sp.bp : randomizeOrientation(sp.bp)
+        })));
+        const origArea = countMatrixArea(chosen.blueprint);
+        exercises.push({
+          id: exercises.length + 1,
+          title: chosen.name,
+          description: `Restore this ${origArea}-tile pixel sprite at 2× resolution. Count the empty gaps carefully as you double every dimension!`,
+          scale: 2,
+          buildRows: Math.max(8, chosen.blueprint.length * 2 + 2),
+          buildCols: Math.max(10, chosen.blueprint[0].length * 2 + 2),
+          blueprint: chosen.blueprint,
+          anchors: [],
+          blocked: [],
+          takeaway: `Irregular pixel art obeys the exact same k² rule: ${origArea} original pixels × 2² = ${origArea * 4} scaled tiles.`
+        });
+      }
+
+      // --- TIER 5: Exercises 13-15 (Anchored & Obstructed Spatial Puzzles, 2x) ---
+      const puzzleShapes = [
+        { name: "Anchored Step-Zone", bp: [[1, 1, 0], [0, 1, 1]] },
+        { name: "Pinned L-Fortress", bp: [[1, 0], [1, 0], [1, 1]] },
+        { name: "Constrained T-Dock", bp: [[1, 1, 1], [0, 1, 0]] },
+        { name: "Harbor U-Pier", bp: [[1, 0, 1], [1, 1, 1]] },
+        { name: "Wedge Outpost", bp: [[1, 0], [1, 1]] }
+      ];
+
+      for (let i = 0; i < 3; i++) {
+        const chosen = pickUnique(puzzleShapes.map(pz => ({
+          ...pz,
+          scale: 2,
+          blueprint: randomizeOrientation(pz.bp)
+        })));
+        const targetMat = computeScaledMatrix(chosen.blueprint, 2);
+        const tR = targetMat.length;
+        const tC = targetMat[0].length;
+        const bRows = Math.max(8, tR + 3);
+        const bCols = Math.max(9, tC + 3);
+
+        // Pick a valid random placement for the target shape
+        const offR = Math.floor(Math.random() * (bRows - tR + 1));
+        const offC = Math.floor(Math.random() * (bCols - tC + 1));
+
+        const occupied = new Set();
+        const filledCells = [];
+        for (let r = 0; r < tR; r++) {
+          for (let c = 0; c < tC; c++) {
+            if (targetMat[r][c] === 1) {
+              const gr = offR + r;
+              const gc = offC + c;
+              occupied.add(`${gr},${gc}`);
+              filledCells.push({ r: gr, c: gc });
+            }
+          }
+        }
+
+        // Choose 1 random anchor inside the valid target footprint
+        const anchor = filledCells[Math.floor(Math.random() * filledCells.length)];
+
+        // Place 3 to 4 blocked obstacles strictly outside the valid footprint
+        const freeCells = [];
+        for (let r = 0; r < bRows; r++) {
+          for (let c = 0; c < bCols; c++) {
+            if (!occupied.has(`${r},${c}`)) {
+              freeCells.push({ r, c });
+            }
+          }
+        }
+        const blocked = freeCells
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 4);
+
+        const origArea = countMatrixArea(chosen.blueprint);
+        exercises.push({
+          id: exercises.length + 1,
+          title: chosen.name,
+          description: `Scale this blueprint by 2× so that it includes the Gold Anchor Pin (📌) and avoids all hatched rock obstacles!`,
+          scale: 2,
+          buildRows: bRows,
+          buildCols: bCols,
+          blueprint: chosen.blueprint,
+          anchors: [anchor],
+          blocked,
+          takeaway: `Spatial puzzle solved! ${origArea} blueprint tiles × 2² = ${origArea * 4} tiles positioned cleanly around obstacles.`
+        });
+      }
+
+      return exercises;
+    }
+
+    /**
+     * ============================================================================
+     * 2. WEB AUDIO SYNTHESIZER (Tactile Marimba / Pop Feedback)
+     * ============================================================================
+     */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+        // Pentatonic scale frequencies (C5, D5, E5, G5, A5, C6, D6, E6)
+        this.scaleNotes = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66, 1318.51];
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playPaint(filledCount) {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        const noteIdx = Math.min(filledCount % this.scaleNotes.length, this.scaleNotes.length - 1);
+        const freq = this.scaleNotes[noteIdx];
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.03, now + 0.08);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.14, now + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+
+      playErase() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(240, now);
+        osc.frequency.exponentialRampToValueAtTime(130, now + 0.09);
+
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.11);
+      }
+
+      playError() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        [220, 196].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+
+          gain.gain.setValueAtTime(0.07, now + idx * 0.11);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.14);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.11);
+          osc.stop(now + idx * 0.11 + 0.15);
+        });
+      }
+
+      playSuccess() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        // Uplifting C major 9th arpeggio
+        const chord = [523.25, 659.25, 783.99, 987.77, 1046.50];
+        chord.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          const start = now + idx * 0.065;
+          osc.frequency.setValueAtTime(freq, start);
+
+          gain.gain.setValueAtTime(0.001, start);
+          gain.gain.linearRampToValueAtTime(0.13, start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(start);
+          osc.stop(start + 0.46);
+        });
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    /**
+     * ============================================================================
+     * 3. GEOMETRY & SCALING ENGINE
+     * ============================================================================
+     */
+    function computeScaledMatrix(blueprint, scale) {
+      const origR = blueprint.length;
+      const origC = blueprint[0].length;
+
+      if (scale >= 1) {
+        const factor = Math.round(scale);
+        const targetR = origR * factor;
+        const targetC = origC * factor;
+        const result = Array.from({ length: targetR }, () => Array(targetC).fill(0));
+
+        for (let r = 0; r < origR; r++) {
+          for (let c = 0; c < origC; c++) {
+            if (blueprint[r][c] === 1) {
+              for (let dr = 0; dr < factor; dr++) {
+                for (let dc = 0; dc < factor; dc++) {
+                  result[r * factor + dr][c * factor + dc] = 1;
+                }
+              }
+            }
+          }
+        }
+        return result;
+      } else {
+        const divisor = Math.round(1 / scale);
+        const targetR = Math.floor(origR / divisor);
+        const targetC = Math.floor(origC / divisor);
+        const result = Array.from({ length: targetR }, () => Array(targetC).fill(0));
+
+        for (let r = 0; r < targetR; r++) {
+          for (let c = 0; c < targetC; c++) {
+            // Sample the top-left cell of each divisor×divisor block
+            result[r][c] = blueprint[r * divisor][c * divisor] === 1 ? 1 : 0;
+          }
+        }
+        return result;
+      }
+    }
+
+    function countMatrixArea(mat) {
+      let sum = 0;
+      for (const row of mat) {
+        for (const v of row) sum += v;
+      }
+      return sum;
+    }
+
+    /**
+     * ============================================================================
+     * 4. GAME STATE & CONTROLLER
+     * ============================================================================
+     */
+    const state = {
+      currentLevelIdx: 0,
+      completedLevels: new Set(),
+      buildState: [], // 2D array: 0 = empty, 1 = painted
+      targetMatrix: [],
+      targetArea: 0,
+      origArea: 0,
+      toolMode: 'paint', // 'paint' | 'erase'
+      isPointerDown: false,
+      dragAction: null, // 'fill' | 'clear'
+      ghostOverlay: null, // { offsetR, offsetC, missingSet, overflowSet }
+      isSolved: false
+    };
+
+    // DOM References
+    const elLevelNav = document.getElementById('level-nav');
+    const elLevelBadge = document.getElementById('level-badge');
+    const elLevelTitle = document.getElementById('level-title');
+    const elLevelDesc = document.getElementById('level-desc');
+    const elScaleDisplay = document.getElementById('scale-factor-display');
+    const elRefDimsBadge = document.getElementById('ref-dims-badge');
+    const elRefGrid = document.getElementById('ref-grid');
+    const elRefAreaReadout = document.getElementById('ref-area-readout');
+    const elBuildGrid = document.getElementById('build-grid');
+    const elSpecialLegend = document.getElementById('special-legend');
+    const elPaintedCount = document.getElementById('painted-count');
+    const elFeedbackBanner = document.getElementById('feedback-banner');
+    const elFeedbackIcon = document.getElementById('feedback-icon');
+    const elFeedbackTitle = document.getElementById('feedback-title');
+    const elFeedbackText = document.getElementById('feedback-text');
+    const elGhostLegend = document.getElementById('ghost-legend');
+    const btnToolPaint = document.getElementById('tool-paint');
+    const btnToolErase = document.getElementById('tool-erase');
+    const btnClear = document.getElementById('clear-btn');
+    const btnCheck = document.getElementById('check-btn');
+    const btnNext = document.getElementById('next-btn');
+    const btnMute = document.getElementById('mute-btn');
+    const btnReshuffle = document.getElementById('reshuffle-btn');
+
+    function startNewSession() {
+      LEVELS = generateRandomizedExercises();
+      state.completedLevels.clear();
+      loadLevel(0);
+    }
+
+    function init() {
+      bindEvents();
+      startNewSession();
+    }
+
+    function loadLevel(idx) {
+      state.currentLevelIdx = idx;
+      const lvl = LEVELS[idx];
+      const displayScale = lvl.scaleLabel || `${lvl.scale}×`;
+
+      state.targetMatrix = computeScaledMatrix(lvl.blueprint, lvl.scale);
+      state.origArea = countMatrixArea(lvl.blueprint);
+      state.targetArea = countMatrixArea(state.targetMatrix);
+      state.buildState = Array.from({ length: lvl.buildRows }, () => Array(lvl.buildCols).fill(0));
+      state.ghostOverlay = null;
+      state.isSolved = false;
+
+      // Pre-fill anchor tiles so the player sees they are part of the shape
+      lvl.anchors.forEach(a => {
+        state.buildState[a.r][a.c] = 1;
+      });
+
+      // Update Header Info
+      elLevelBadge.textContent = `Exercise ${lvl.id} of ${LEVELS.length}`;
+      elLevelTitle.textContent = lvl.title;
+      elLevelDesc.textContent = lvl.description;
+      elScaleDisplay.textContent = displayScale;
+
+      const bpRows = lvl.blueprint.length;
+      const bpCols = lvl.blueprint[0].length;
+      elRefDimsBadge.textContent = `${bpCols}w × ${bpRows}h`;
+      elRefAreaReadout.textContent = `${state.origArea} sq unit${state.origArea === 1 ? '' : 's'}`;
+
+      // Show special legend if anchors or obstacles exist
+      if (lvl.anchors.length > 0 || lvl.blocked.length > 0) {
+        elSpecialLegend.classList.remove('hidden');
+      } else {
+        elSpecialLegend.classList.add('hidden');
+      }
+
+      // Reset UI controls
+      btnNext.classList.add('hidden');
+      btnCheck.classList.remove('hidden');
+      hideFeedback();
+
+      renderLevelNav();
+      renderReferenceGrid();
+      renderBuildGrid();
+      updateAreaCounter();
+    }
+
+    function renderLevelNav() {
+      elLevelNav.innerHTML = '';
+      LEVELS.forEach((lvl, idx) => {
+        const btn = document.createElement('button');
+        const isCurrent = idx === state.currentLevelIdx;
+        const isDone = state.completedLevels.has(lvl.id);
+
+        let cls = 'px-2.5 py-1 rounded-lg text-xs font-bold border transition whitespace-nowrap cursor-pointer ';
+        if (isCurrent) {
+          cls += 'bg-slate-900 text-white border-slate-900 shadow-xs';
+        } else if (isDone) {
+          cls += 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100';
+        } else {
+          cls += 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200';
+        }
+
+        btn.className = cls;
+        btn.textContent = `${isDone ? '✓ ' : ''}L${lvl.id}`;
+        btn.title = `Level ${lvl.id}: ${lvl.title} (${lvl.scale}×)`;
+        btn.addEventListener('click', () => loadLevel(idx));
+        elLevelNav.appendChild(btn);
+      });
+    }
+
+    function renderReferenceGrid() {
+      const lvl = LEVELS[state.currentLevelIdx];
+      const bp = lvl.blueprint;
+      const rows = bp.length;
+      const cols = bp[0].length;
+
+      const tileSize = Math.max(26, Math.min(44, Math.floor(220 / Math.max(rows, cols))));
+      elRefGrid.style.gridTemplateColumns = `repeat(${cols}, ${tileSize}px)`;
+      elRefGrid.innerHTML = '';
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement('div');
+          cell.style.width = `${tileSize}px`;
+          cell.style.height = `${tileSize}px`;
+
+          if (bp[r][c] === 1) {
+            cell.className = 'rounded-xs bg-blue-600 border border-blue-800 shadow-xs';
+          } else {
+            cell.className = 'rounded-xs bg-white/90';
+          }
+          elRefGrid.appendChild(cell);
+        }
+      }
+    }
+
+    function isAnchor(r, c) {
+      const lvl = LEVELS[state.currentLevelIdx];
+      return lvl.anchors.some(a => a.r === r && a.c === c);
+    }
+
+    function isBlocked(r, c) {
+      const lvl = LEVELS[state.currentLevelIdx];
+      return lvl.blocked.some(b => b.r === r && b.c === c);
+    }
+
+    function renderBuildGrid(celebrate = false) {
+      const lvl = LEVELS[state.currentLevelIdx];
+      const rows = lvl.buildRows;
+      const cols = lvl.buildCols;
+
+      const tileSize = Math.max(28, Math.min(40, Math.floor(310 / Math.max(rows, cols))));
+      elBuildGrid.style.gridTemplateColumns = `repeat(${cols}, ${tileSize}px)`;
+      elBuildGrid.innerHTML = '';
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement('div');
+          cell.style.width = `${tileSize}px`;
+          cell.style.height = `${tileSize}px`;
+          cell.dataset.r = r;
+          cell.dataset.c = c;
+
+          const blocked = isBlocked(r, c);
+          const anchored = isAnchor(r, c);
+          const filled = state.buildState[r][c] === 1;
+          const key = `${r},${c}`;
+
+          let classes = 'rounded-xs relative flex items-center justify-center transition-colors duration-75 ';
+
+          if (blocked) {
+            classes += 'tile-blocked border border-slate-700';
+          } else if (filled) {
+            classes += celebrate
+              ? 'tile-celebrate text-white border border-emerald-800 cursor-pointer'
+              : 'bg-blue-600 hover:bg-blue-500 border border-blue-800 cursor-pointer shadow-xs';
+          } else {
+            classes += 'bg-white hover:bg-blue-50 cursor-pointer';
+          }
+
+          // Ghost Overlay styling after a failed check
+          if (state.ghostOverlay && !blocked) {
+            if (state.ghostOverlay.overflowSet.has(key)) {
+              classes += ' !bg-rose-500 !border-rose-700';
+            } else if (state.ghostOverlay.missingSet.has(key)) {
+              classes += ' !bg-emerald-100/90 !border-2 !border-dashed !border-emerald-600';
+            }
+          }
+
+          cell.className = classes;
+
+          if (anchored) {
+            const pin = document.createElement('span');
+            pin.className = 'text-xs pointer-events-none select-none drop-shadow-xs';
+            pin.textContent = '📌';
+            cell.appendChild(pin);
+          }
+
+          elBuildGrid.appendChild(cell);
+        }
+      }
+    }
+
+    function applyCellInteraction(r, c, forcedAction = null) {
+      if (state.isSolved) return;
+      if (isBlocked(r, c) || isAnchor(r, c)) return;
+
+      const currentVal = state.buildState[r][c];
+      let nextVal = currentVal;
+
+      if (forcedAction === 'fill') {
+        nextVal = 1;
+      } else if (forcedAction === 'clear') {
+        nextVal = 0;
+      } else {
+        nextVal = state.toolMode === 'paint' ? 1 : 0;
+      }
+
+      if (nextVal === currentVal) return;
+
+      state.buildState[r][c] = nextVal;
+
+      // Clear any previous ghost overlay as soon as the user edits the grid
+      if (state.ghostOverlay) {
+        state.ghostOverlay = null;
+        hideFeedback();
+        renderBuildGrid();
+      } else {
+        // Fast single-cell DOM update for 60fps dragging
+        const lvl = LEVELS[state.currentLevelIdx];
+        const cellIndex = r * lvl.buildCols + c;
+        const cellEl = elBuildGrid.children[cellIndex];
+        if (cellEl) {
+          if (nextVal === 1) {
+            cellEl.className = 'rounded-xs relative flex items-center justify-center bg-blue-600 hover:bg-blue-500 border border-blue-800 cursor-pointer shadow-xs tile-filled';
+          } else {
+            cellEl.className = 'rounded-xs relative flex items-center justify-center bg-white hover:bg-blue-50 cursor-pointer transition-colors duration-75';
+          }
+        }
+      }
+
+      const painted = countMatrixArea(state.buildState);
+      if (nextVal === 1) {
+        sound.playPaint(painted);
+      } else {
+        sound.playErase();
+      }
+      updateAreaCounter();
+    }
+
+    function updateAreaCounter() {
+      const painted = countMatrixArea(state.buildState);
+      elPaintedCount.textContent = painted;
+    }
+
+    /**
+     * ============================================================================
+     * 5. TRANSLATION-INVARIANT SHAPE VERIFICATION & BEST-FIT GHOST FINDER
+     * ============================================================================
+     */
+    function verifyBuild() {
+      const lvl = LEVELS[state.currentLevelIdx];
+      const bRows = lvl.buildRows;
+      const bCols = lvl.buildCols;
+      const tRows = state.targetMatrix.length;
+      const tCols = state.targetMatrix[0].length;
+
+      // Collect player's painted coordinates
+      const playerCoords = [];
+      for (let r = 0; r < bRows; r++) {
+        for (let c = 0; c < bCols; c++) {
+          if (state.buildState[r][c] === 1) {
+            playerCoords.push({ r, c });
+          }
+        }
+      }
+
+      if (playerCoords.length === 0) {
+        sound.playError();
+        showFeedback(
+          'warning',
+          'The Build Grid is empty!',
+          `Paint squares on the Build Grid to match the ${lvl.scale}× scaled shape.`
+        );
+        return;
+      }
+
+      // Slide the targetMatrix across all valid offsets (offsetR, offsetC) on the Build Grid
+      let bestMatch = null;
+      let minErrors = Infinity;
+
+      for (let offsetR = 0; offsetR <= bRows - tRows; offsetR++) {
+        for (let offsetC = 0; offsetC <= bCols - tCols; offsetC++) {
+          let hitsBlocked = false;
+          const expectedSet = new Set();
+
+          for (let tr = 0; tr < tRows; tr++) {
+            for (let tc = 0; tc < tCols; tc++) {
+              if (state.targetMatrix[tr][tc] === 1) {
+                const gr = offsetR + tr;
+                const gc = offsetC + tc;
+                if (isBlocked(gr, gc)) {
+                  hitsBlocked = true;
+                  break;
+                }
+                expectedSet.add(`${gr},${gc}`);
+              }
+            }
+            if (hitsBlocked) break;
+          }
+
+          if (hitsBlocked) continue;
+
+          // Must include all anchor tiles
+          const coversAnchors = lvl.anchors.every(a => expectedSet.has(`${a.r},${a.c}`));
+          if (!coversAnchors) continue;
+
+          // Compute symmetric difference (missing + overflow) against player's painted tiles
+          const playerSet = new Set(playerCoords.map(p => `${p.r},${p.c}`));
+          const missingSet = new Set();
+          const overflowSet = new Set();
+
+          expectedSet.forEach(key => {
+            if (!playerSet.has(key)) missingSet.add(key);
+          });
+          playerSet.forEach(key => {
+            if (!expectedSet.has(key)) overflowSet.add(key);
+          });
+
+          const totalErrors = missingSet.size + overflowSet.size;
+          if (totalErrors < minErrors) {
+            minErrors = totalErrors;
+            bestMatch = { offsetR, offsetC, missingSet, overflowSet };
+          }
+        }
+      }
+
+      // Exact Match Found!
+      if (bestMatch && minErrors === 0) {
+        state.isSolved = true;
+        state.ghostOverlay = null;
+        state.completedLevels.add(lvl.id);
+
+        sound.playSuccess();
+        renderBuildGrid(true);
+        renderLevelNav();
+
+        btnCheck.classList.add('hidden');
+        if (state.currentLevelIdx < LEVELS.length - 1) {
+          btnNext.classList.remove('hidden');
+        }
+
+        const displayScale = lvl.scaleLabel || `${lvl.scale}×`;
+        const allDone = state.completedLevels.size === LEVELS.length;
+        showFeedback(
+          'success',
+          allDone
+            ? `🏆 All 15 Exercises Complete! (${displayScale} Blueprint Verified)`
+            : `Scale Verified! (${displayScale} Blueprint Complete)`,
+          allDone
+            ? `${lvl.takeaway} Click "New 15" in the top bar anytime to generate a fresh randomized set!`
+            : lvl.takeaway
+        );
+        return;
+      }
+
+      // Not an exact match: show helpful math feedback + best-fit ghost overlay
+      sound.playError();
+      const paintedCount = playerCoords.length;
+      const displayScale = lvl.scaleLabel || `${lvl.scale}×`;
+
+      if (bestMatch) {
+        state.ghostOverlay = bestMatch;
+        renderBuildGrid(false);
+      }
+
+      let diagnostic = '';
+      if (Math.abs(paintedCount - state.origArea * lvl.scale) < 0.01 && lvl.scale !== 1) {
+        diagnostic = `Careful! You painted ${paintedCount} squares (linearly ${displayScale} the original ${state.origArea}), but scaling both width and height by ${displayScale} multiplies the area by (${displayScale})²! `;
+      } else if (paintedCount !== state.targetArea) {
+        diagnostic = `You painted ${paintedCount} square${paintedCount === 1 ? '' : 's'}, which doesn't match the scaled area yet. Remember: each original tile scales in both width and height by ${displayScale}. `;
+      } else {
+        diagnostic = `Your total area (${paintedCount} squares) is spot on! However, the proportions or alignment don't quite match the ${displayScale} blueprint yet. `;
+      }
+
+      showFeedback(
+        'error',
+        'Not quite right — check the ghost outline on the grid!',
+        diagnostic,
+        Boolean(bestMatch)
+      );
+    }
+
+    function showFeedback(type, title, text, showGhostKey = false) {
+      elFeedbackBanner.classList.remove(
+        'hidden',
+        'bg-emerald-50', 'border-emerald-300', 'text-emerald-950',
+        'bg-rose-50', 'border-rose-300', 'text-rose-950',
+        'bg-amber-50', 'border-amber-300', 'text-amber-950'
+      );
+
+      if (type === 'success') {
+        elFeedbackBanner.classList.add('bg-emerald-50', 'border-emerald-300', 'text-emerald-950');
+        elFeedbackIcon.textContent = '🎉';
+      } else if (type === 'error') {
+        elFeedbackBanner.classList.add('bg-rose-50', 'border-rose-300', 'text-rose-950');
+        elFeedbackIcon.textContent = '📐';
+      } else {
+        elFeedbackBanner.classList.add('bg-amber-50', 'border-amber-300', 'text-amber-950');
+        elFeedbackIcon.textContent = '💡';
+      }
+
+      elFeedbackTitle.textContent = title;
+      elFeedbackText.textContent = text;
+
+      if (showGhostKey) {
+        elGhostLegend.classList.remove('hidden');
+      } else {
+        elGhostLegend.classList.add('hidden');
+      }
+    }
+
+    function hideFeedback() {
+      elFeedbackBanner.classList.add('hidden');
+      elGhostLegend.classList.add('hidden');
+    }
+
+    function setToolMode(mode) {
+      state.toolMode = mode;
+      if (mode === 'paint') {
+        btnToolPaint.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 bg-blue-600 text-white border-blue-700 shadow-xs';
+        btnToolErase.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200';
+      } else {
+        btnToolErase.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 bg-slate-800 text-white border-slate-900 shadow-xs';
+        btnToolPaint.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200';
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 6. POINTER & TOUCH INPUT HANDLERS
+     * ============================================================================
+     */
+    function getCellFromPoint(clientX, clientY) {
+      const target = document.elementFromPoint(clientX, clientY);
+      if (!target) return null;
+      const cell = target.closest('[data-r][data-c]');
+      if (!cell || !elBuildGrid.contains(cell)) return null;
+      return {
+        r: parseInt(cell.dataset.r, 10),
+        c: parseInt(cell.dataset.c, 10)
+      };
+    }
+
+    function bindEvents() {
+      // Prevent context menu on Build Grid so right-click erases cleanly
+      elBuildGrid.addEventListener('contextmenu', e => e.preventDefault());
+
+      elBuildGrid.addEventListener('pointerdown', e => {
+        if (state.isSolved) return;
+        const coords = getCellFromPoint(e.clientX, e.clientY);
+        if (!coords) return;
+
+        state.isPointerDown = true;
+        // Right-click (button 2) always erases; otherwise use selected tool
+        const isRightClick = e.button === 2;
+        if (isRightClick || state.toolMode === 'erase') {
+          state.dragAction = 'clear';
+        } else {
+          // Smart toggle if clicking an already painted cell in paint mode
+          const alreadyFilled = state.buildState[coords.r][coords.c] === 1;
+          state.dragAction = alreadyFilled ? 'clear' : 'fill';
+        }
+
+        applyCellInteraction(coords.r, coords.c, state.dragAction);
+      });
+
+      window.addEventListener('pointermove', e => {
+        if (!state.isPointerDown || state.isSolved) return;
+        const coords = getCellFromPoint(e.clientX, e.clientY);
+        if (!coords) return;
+        applyCellInteraction(coords.r, coords.c, state.dragAction);
+      });
+
+      window.addEventListener('pointerup', () => {
+        state.isPointerDown = false;
+        state.dragAction = null;
+      });
+
+      btnToolPaint.addEventListener('click', () => setToolMode('paint'));
+      btnToolErase.addEventListener('click', () => setToolMode('erase'));
+
+      btnClear.addEventListener('click', () => {
+        const lvl = LEVELS[state.currentLevelIdx];
+        state.buildState = Array.from({ length: lvl.buildRows }, () => Array(lvl.buildCols).fill(0));
+        lvl.anchors.forEach(a => {
+          state.buildState[a.r][a.c] = 1;
+        });
+        state.ghostOverlay = null;
+        state.isSolved = false;
+        btnNext.classList.add('hidden');
+        btnCheck.classList.remove('hidden');
+        hideFeedback();
+        sound.playErase();
+        renderBuildGrid();
+        updateAreaCounter();
+      });
+
+      btnCheck.addEventListener('click', verifyBuild);
+
+      btnNext.addEventListener('click', () => {
+        if (state.currentLevelIdx < LEVELS.length - 1) {
+          loadLevel(state.currentLevelIdx + 1);
+        }
+      });
+
+      btnMute.addEventListener('click', () => {
+        sound.muted = !sound.muted;
+        document.getElementById('mute-icon').textContent = sound.muted ? '🔇' : '🔊';
+        document.getElementById('mute-label').textContent = sound.muted ? 'Muted' : 'Sound On';
+      });
+
+      btnReshuffle.addEventListener('click', () => {
+        sound.playErase();
+        startNewSession();
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
